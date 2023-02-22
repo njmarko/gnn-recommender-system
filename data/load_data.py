@@ -2,26 +2,27 @@ import numpy as np
 import pandas as pd
 import torch
 from collections import defaultdict
+from sklearn.preprocessing import LabelEncoder
 
 pd.set_option('display.max_columns', None)
 
 
 def sort_cities(population):
     if population < 50000:
-        return 'rural'
+        return 0  # 'rural'
     if population < 100_000:
-        return 'small'
+        return 1  # 'small'
     if population < 250_000:
-        return 'small_medium'
+        return 2  # 'small_medium'
     if population < 500_000:
-        return 'medium'
+        return 3  # 'medium'
     if population < 1_000_000:
-        return 'medium_large'
-    return 'large'
+        return 4  # 'medium_large'
+    return 5  # 'large'
 
 
 def read_customers():
-    users = pd.read_csv('ecommerce/olist_customers_dataset.csv')
+    users = pd.read_csv('ecommerce/olist_customers_dataset.csv', index_col='customer_unique_id')
     st_inhabitants = pd.read_csv('ecommerce/br_state_inhabitants.csv')
     st_codes = pd.read_csv('ecommerce/br_state_codes.csv')
     st_grp = pd.read_csv('ecommerce/br_state_grp.csv')  # gross regional product
@@ -49,7 +50,15 @@ def read_customers():
     users['pop2023'].fillna(0, inplace=True)
     users['living_category'] = users['pop2023'].apply(lambda row: sort_cities(row))
 
-    return users
+    le = LabelEncoder()
+    le.fit(users['customer_state'])
+
+    users['customer_state_code'] = le.transform(users['customer_state'])
+    users.drop(columns=['customer_state', 'customer_city', 'customer_zip_code_prefix'], inplace=True)
+
+    mapping = {index: i for i, index in enumerate(users.index.unique())}
+
+    return users, mapping
 
 
 def read_product_translations():
@@ -64,6 +73,12 @@ def get_product_translation(product, translation_df):
 
 def read_products(translate=False):
     products = pd.read_csv('ecommerce/olist_products_dataset.csv')
+    products['product_category_name'].fillna('N/A', inplace=True)
+    products.fillna(0, inplace=True)
+
+    le = LabelEncoder()
+    le.fit(products['product_category_name'])
+    products['product_category_code'] = le.transform(products['product_category_name'])
 
     if translate:
         product_name_translations = read_product_translations()
@@ -71,7 +86,11 @@ def read_products(translate=False):
             lambda product: get_product_translation(product, product_name_translations)
         )
 
-    return products
+    products.drop(columns='product_category_name', inplace=True)
+
+    mapping = {index: i for i, index in enumerate(products.index.unique())}
+
+    return products, mapping
 
 
 class Edge:
@@ -97,7 +116,6 @@ def create_graph_edges():
     order_items = pd.read_csv('ecommerce/olist_order_items_dataset.csv')
     users = pd.read_csv('ecommerce/olist_customers_dataset.csv')
     ratings = pd.read_csv('ecommerce/olist_order_reviews_dataset.csv')
-    edge_dict = defaultdict(dict)
 
     # Ne bi trebalo da moze da vise review-ova ima isti review_id
     # Ne bi trebalo da moze da vise review-ova ocenjuju istu narudzbinu
@@ -106,28 +124,19 @@ def create_graph_edges():
     ratings.drop_duplicates(subset=['review_id'])
     ratings.drop_duplicates(subset=['order_id'])
 
-    for row in orders.itertuples(index=False):
-        customer_id, order_id = row.customer_id, row.order_id
-        user_id = users[users['customer_id' == customer_id]]['unique_customer_id']
-        user_items = order_items[order_items['order_id' == order_id]]
-        for item in user_items.itertuples(index=False):
-            if item.order_item_id > 1:
-                print('stop me')
-            try:
-                edge_dict[user_id][item.product_id] += 1
-            except KeyError:
-                edge_dict[user_id][item.product_id] = Edge(user_id, item.product_id)
-            if not ratings[ratings['order_id'] == item.order_id].empty:
-                rating = ratings[ratings['order_id'] == item.order_id].iloc[0]['review_score']
-                edge_dict[user_id][item.product_id].set_rating(rating)
+    user_orders = pd.merge(users, orders, how='inner', on='customer_id')
+    user_orders_reviewed = pd.merge(user_orders, ratings, how='left', on='order_id')
+    user_items = pd.merge(user_orders_reviewed, order_items, how='right', on='order_id')
 
-    return edge_dict
+    # user_items['review_score'].fillna(value=3, inplace=True)
 
+    # print(user_items[['customer_unique_id', 'product_id', 'review_score']]
+    #       [user_items['order_id'] == '005d9a5423d47281ac463a968b3936fb' ])  # '001ab0a7578dd66cd4b0a71f5b6e1e41'])
 
+    return user_items[['customer_unique_id', 'product_id', 'review_score']]
 
 
 if __name__ == '__main__':
-    e = Edge('1', '1')
-    print(e.product_purchase_count)
-    e += 1
-    print(e.product_purchase_count)
+    edges = create_graph_edges()
+    print(edges.describe())
+    print('done')
