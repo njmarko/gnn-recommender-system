@@ -22,7 +22,7 @@ def sort_cities(population):
 
 
 def read_customers():
-    users = pd.read_csv('ecommerce/olist_customers_dataset.csv', index_col='customer_unique_id')
+    users = pd.read_csv('ecommerce/olist_customers_dataset.csv')
     st_inhabitants = pd.read_csv('ecommerce/br_state_inhabitants.csv')
     st_codes = pd.read_csv('ecommerce/br_state_codes.csv')
     st_grp = pd.read_csv('ecommerce/br_state_grp.csv')  # gross regional product
@@ -56,6 +56,8 @@ def read_customers():
     users['customer_state_code'] = le.transform(users['customer_state'])
     users.drop(columns=['customer_state', 'customer_city', 'customer_zip_code_prefix'], inplace=True)
 
+    users.set_index('customer_unique_id', inplace=True)
+
     mapping = {index: i for i, index in enumerate(users.index.unique())}
 
     return users, mapping
@@ -72,7 +74,7 @@ def get_product_translation(product, translation_df):
 
 
 def read_products(translate=False):
-    products = pd.read_csv('ecommerce/olist_products_dataset.csv')
+    products = pd.read_csv('ecommerce/olist_products_dataset.csv', index_col='product_id')
     products['product_category_name'].fillna('N/A', inplace=True)
     products.fillna(0, inplace=True)
 
@@ -128,15 +130,32 @@ def create_graph_edges():
     user_orders_reviewed = pd.merge(user_orders, ratings, how='left', on='order_id')
     user_items = pd.merge(user_orders_reviewed, order_items, how='right', on='order_id')
 
+    user_item_counts = (
+        user_items
+        .groupby(['customer_unique_id', 'product_id'])
+        .size()
+        .reset_index().rename(columns={0: 'purchase_count'})
+    )
+
+    # print(user_item_counts[user_item_counts['customer_unique_id'] == 'bb8a37225e0279ac8a274c9765617eaf'])
+
+    user_items = (
+        pd
+        .merge(user_items, user_item_counts, how='outer', on=['customer_unique_id', 'product_id'])
+        .drop_duplicates(subset=['customer_unique_id', 'product_id'])
+    )
+
     # user_items['review_score'].fillna(value=3, inplace=True)
 
     # print(user_items[['customer_unique_id', 'product_id', 'review_score']]
     #       [user_items['order_id'] == '005d9a5423d47281ac463a968b3936fb' ])  # '001ab0a7578dd66cd4b0a71f5b6e1e41'])
 
-    return user_items[['customer_unique_id', 'product_id', 'review_score']]
+    return user_items[['customer_unique_id', 'product_id', 'review_score', 'purchase_count']]
 
 
 if __name__ == '__main__':
-    edges = create_graph_edges()
-    print(edges.describe())
-    print('done')
+    customers, customer_mapping = read_customers()
+    products, product_mapping = read_products()
+
+    print(customers.columns)
+    print(products.columns)
