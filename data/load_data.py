@@ -21,12 +21,12 @@ def sort_cities(population):
     return 5  # 'large'
 
 
-def read_customers():
-    users = pd.read_csv('ecommerce/olist_customers_dataset.csv')
-    st_inhabitants = pd.read_csv('ecommerce/br_state_inhabitants.csv')
-    st_codes = pd.read_csv('ecommerce/br_state_codes.csv')
-    st_grp = pd.read_csv('ecommerce/br_state_grp.csv')  # gross regional product
-    ct_inhabitants = pd.read_csv('ecommerce/br_cities_population.csv')
+def read_customers() -> tuple[pd.DataFrame, dict]:
+    users = pd.read_csv('../data/ecommerce/olist_customers_dataset.csv')
+    st_inhabitants = pd.read_csv('../data/ecommerce/br_state_inhabitants.csv')
+    st_codes = pd.read_csv('../data/ecommerce/br_state_codes.csv')
+    st_grp = pd.read_csv('../data/ecommerce/br_state_grp.csv')  # gross regional product
+    ct_inhabitants = pd.read_csv('../data/ecommerce/br_cities_population.csv')
 
     st_inhabitants['population'] /= 1000    # convert to milli vanillions
     st_inhabitants = pd.merge(
@@ -54,7 +54,7 @@ def read_customers():
     le.fit(users['customer_state'])
 
     users['customer_state_code'] = le.transform(users['customer_state'])
-    users.drop(columns=['customer_state', 'customer_city', 'customer_zip_code_prefix'], inplace=True)
+    users.drop(columns=['customer_state', 'customer_city', 'customer_zip_code_prefix', 'customer_id'], inplace=True)
 
     users.set_index('customer_unique_id', inplace=True)
 
@@ -64,7 +64,7 @@ def read_customers():
 
 
 def read_product_translations():
-    translations = pd.read_csv('ecommerce/product_category_name_translation.csv')
+    translations = pd.read_csv('../data/ecommerce/product_category_name_translation.csv')
     return translations
 
 
@@ -73,8 +73,8 @@ def get_product_translation(product, translation_df):
     return x
 
 
-def read_products(translate=False):
-    products = pd.read_csv('ecommerce/olist_products_dataset.csv', index_col='product_id')
+def read_products(translate=False) -> tuple[pd.DataFrame, dict]:
+    products = pd.read_csv('../data/ecommerce/olist_products_dataset.csv', index_col='product_id')
     products['product_category_name'].fillna('N/A', inplace=True)
     products.fillna(0, inplace=True)
 
@@ -113,11 +113,11 @@ class Edge:
         return torch.Tensor([self.rating, self.product_purchase_count])
 
 
-def create_graph_edges():
-    orders = pd.read_csv('ecommerce/olist_orders_dataset.csv')
-    order_items = pd.read_csv('ecommerce/olist_order_items_dataset.csv')
-    users = pd.read_csv('ecommerce/olist_customers_dataset.csv')
-    ratings = pd.read_csv('ecommerce/olist_order_reviews_dataset.csv')
+def create_graph_edges() -> pd.DataFrame:
+    orders = pd.read_csv('../data/ecommerce/olist_orders_dataset.csv')
+    order_items = pd.read_csv('../data/ecommerce/olist_order_items_dataset.csv')
+    users = pd.read_csv('../data/ecommerce/olist_customers_dataset.csv')
+    ratings = pd.read_csv('../data/ecommerce/olist_order_reviews_dataset.csv')
 
     # Ne bi trebalo da moze da vise review-ova ima isti review_id
     # Ne bi trebalo da moze da vise review-ova ocenjuju istu narudzbinu
@@ -159,3 +159,7 @@ if __name__ == '__main__':
 
     print(customers.columns)
     print(products.columns)
+    print(products.columns)
+
+    print(customers.head().values)
+    print(products.head().values)

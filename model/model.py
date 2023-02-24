@@ -1,5 +1,5 @@
 import torch
-from torch_geometric.nn import GATConv, Linear, to_hetero
+from torch_geometric.nn import GATConv, Linear
 
 
 class GAT(torch.nn.Module):
