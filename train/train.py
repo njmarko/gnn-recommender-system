@@ -1,10 +1,19 @@
-import numpy as np
+import argparse
 import torch
-from model.model import GAT
-from data.load_data import read_customers, read_products, create_graph_edges
+import numpy as np
+
+import torch.nn.functional as F
 from torch_geometric.nn import to_hetero
 from torch_geometric.data import HeteroData
 from torch_geometric.transforms import RandomLinkSplit, ToUndirected
+
+from model.model import Model
+from data.load_data import read_customers, read_products, create_graph_edges
+
+
+def weighted_mse_loss(pred, target, weight=None):
+    weight = 1. if weight is None else weight[target].to(pred.dtype)
+    return (weight * (pred - target.to(pred.dtype)).pow(2)).mean()
 
 
 def load_data():
@@ -30,21 +39,91 @@ def load_data():
     products_tensor = torch.from_numpy(products.values)
 
     data = HeteroData()
-    data['customers'].x = customers_tensor
-    data['products'].x = products_tensor
+    data['customer'].x = customers_tensor
+    data['product'].x = products_tensor
 
-    data['customers', 'buys', 'products'].edge_index = purchase_edge_index
-    data['customers', 'buys', 'products'].edge_label = purchase_edge_label
+    data['customer', 'buys', 'product'].edge_index = edge_index
+    data['customer', 'buys', 'product'].edge_label = edge_label
 
-    data['customers', 'reviews', 'products'].edge_index = review_edge_index
-    data['customers', 'reviews', 'products'].edge_label = review_edge_label
+    # data['customer', 'buys', 'product'].edge_index = purchase_edge_index
+    # data['customer', 'buys', 'product'].edge_label = purchase_edge_label
+    #
+    # data['customer', 'reviews', 'product'].edge_index = review_edge_index
+    # data['customer', 'reviews', 'product'].edge_label = review_edge_label
 
     data = ToUndirected()(data)
-    del data['products', 'rev_buys', 'customers'].edge_label
-    del data['products', 'rev_reviews', 'products'].edge_label
+    del data['product', 'rev_buys', 'customer'].edge_label
+    # del data['product', 'rev_reviews', 'product'].edge_label
 
     return data
 
 
+def split_data(data, val_ratio=0.1, test_ratio=0.1):
+    transform = RandomLinkSplit(
+        num_val=val_ratio,
+        num_test=test_ratio,
+        neg_sampling_ratio=0.0,
+        edge_types=[('customer', 'buys', 'product')],
+        rev_edge_types=[('product', 'rev_buys', 'customer')],
+    )
+    return transform(data)
+
+
+def train(model, data, optimizer, weight=None):
+    model.train()
+    optimizer.zero_grad()
+    pred = model(data.x_dict, data.edge_index_dict,
+                 data['customer', 'product'].edge_label_index)
+    target = data['customer', 'product'].edge_label
+    loss = weighted_mse_loss(pred, target, weight)
+    loss.backward()
+    optimizer.step()
+    return float(loss)
+
+
+@torch.no_grad()
+def test(model, data):
+    pred = model(data.x_dict, data.edge_index_dict,
+                 data['customer', 'product'].edge_label_index)
+    pred = pred.clamp(min=0, max=5)
+    target = data['customer', 'product'].edge_label.float()
+    rmse = F.mse_loss(pred, target).sqrt()
+    return float(rmse)
+
+
+def main(args):
+    graph_data = load_data()
+    train_data, val_data, test_data = split_data(graph_data)
+
+    # We have an unbalanced dataset with many labels for rating 3 and 4, and very
+    # few for 0 and 1, therefore we use a weighted MSE loss.
+    if args.use_weighted_loss:
+        weight = torch.bincount(train_data['user', 'movie'].edge_label)
+        weight = weight.max() / weight
+    else:
+        weight = None
+
+    model = Model(hidden_channels=32, metadata=graph_data.metadata())
+
+    # Due to lazy initialization, we need to run one model step so the number
+    # of parameters can be inferred:
+    with torch.no_grad():
+        model.encoder(train_data.x_dict, train_data.edge_index_dict)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+    for epoch in range(1, args.no_epochs+1):
+        loss = train(model, train_data, optimizer, weight)
+        train_rmse = test(model, train_data)
+        val_rmse = test(model, val_data)
+        test_rmse = test(model, test_data)
+        print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, Train: {train_rmse:.4f}, '
+              f'Val: {val_rmse:.4f}, Test: {test_rmse:.4f}')
+
+
 if __name__ == '__main__':
-    load_data()
+    PARSER = argparse.ArgumentParser()
+    PARSER.add_argument('--use_weighted_loss', action='store_true',
+                        help='Whether to use weighted MSE loss.')
+    PARSER.add_argument('--no_epochs', default=300, type=int)
+    ARGS = PARSER.parse_args()
