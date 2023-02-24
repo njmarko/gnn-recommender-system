@@ -1,9 +1,7 @@
 import argparse
 import torch
-import numpy as np
 
 import torch.nn.functional as F
-from torch_geometric.nn import to_hetero
 from torch_geometric.data import HeteroData
 from torch_geometric.transforms import RandomLinkSplit, ToUndirected
 
