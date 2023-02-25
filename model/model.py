@@ -30,10 +30,10 @@ class GNNEncoder(torch.nn.Module):
 
 
 class EdgeDecoder(torch.nn.Module):
-    def __init__(self, hidden_channels):
+    def __init__(self, hidden_channels, edge_features):
         super().__init__()
         self.lin1 = Linear(2 * hidden_channels, hidden_channels)
-        self.lin2 = Linear(hidden_channels, 1)
+        self.lin2 = Linear(hidden_channels, edge_features)
 
     def forward(self, z_dict, edge_label_index):
         row, col = edge_label_index
@@ -41,15 +41,15 @@ class EdgeDecoder(torch.nn.Module):
 
         z = self.lin1(z).relu()
         z = self.lin2(z)
-        return z.view(-1)
+        return z
 
 
 class Model(torch.nn.Module):
-    def __init__(self, hidden_channels, metadata):
+    def __init__(self, hidden_channels, edge_features, metadata):
         super().__init__()
         self.encoder = GNNEncoder(hidden_channels, hidden_channels)
         self.encoder = to_hetero(self.encoder, metadata, aggr='sum')
-        self.decoder = EdgeDecoder(hidden_channels)
+        self.decoder = EdgeDecoder(hidden_channels, edge_features)
 
     def forward(self, x_dict, edge_index_dict, edge_label_index):
         z_dict = self.encoder(x_dict, edge_index_dict)

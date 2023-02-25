@@ -145,7 +145,7 @@ def create_graph_edges() -> pd.DataFrame:
         .drop_duplicates(subset=['customer_unique_id', 'product_id'])
     )
 
-    # user_items['review_score'].fillna(value=3, inplace=True)
+    user_items['review_score'].fillna(value=3, inplace=True)
 
     # print(user_items[['customer_unique_id', 'product_id', 'review_score']]
     #       [user_items['order_id'] == '005d9a5423d47281ac463a968b3936fb' ])  # '001ab0a7578dd66cd4b0a71f5b6e1e41'])

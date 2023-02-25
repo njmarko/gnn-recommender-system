@@ -11,7 +11,12 @@ from data.load_data import read_customers, read_products, create_graph_edges
 
 def weighted_mse_loss(pred, target, weight=None):
     weight = 1. if weight is None else weight[target].to(pred.dtype)
-    return (weight * (pred - target.to(pred.dtype)).pow(2)).mean()
+    diff = pred - target.to(pred.dtype)
+    weighted_diff = weight * diff
+    sum_loss = weighted_diff.pow(2)
+    loss = sum_loss.mean()
+    # loss = (weight * (pred - target.to(pred.dtype)).pow(2)).mean()
+    return loss
 
 
 def load_data():
@@ -25,7 +30,7 @@ def load_data():
     edge_attrs = [
         torch.tensor(graph_edge_data[column].values).unsqueeze(dim=1) for column in ['review_score', 'purchase_count']
     ]
-    edge_label = torch.cat(edge_attrs, dim=-1)
+    edge_label = torch.cat(edge_attrs, dim=-1).to(torch.float32)
 
     review_edge_index = edge_index
     review_edge_label = torch.tensor(graph_edge_data['review_score'].values).unsqueeze(dim=1)
@@ -33,8 +38,8 @@ def load_data():
     purchase_edge_index = edge_index
     purchase_edge_label = torch.tensor(graph_edge_data['purchase_count'].values).unsqueeze(dim=1)
 
-    customers_tensor = torch.from_numpy(customers.values)
-    products_tensor = torch.from_numpy(products.values)
+    customers_tensor = torch.from_numpy(customers.values).to(torch.float32)
+    products_tensor = torch.from_numpy(products.values).to(torch.float32)
 
     data = HeteroData()
     data['customer'].x = customers_tensor
@@ -101,7 +106,7 @@ def main(args):
     else:
         weight = None
 
-    model = Model(hidden_channels=32, metadata=graph_data.metadata())
+    model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
 
     # Due to lazy initialization, we need to run one model step so the number
     # of parameters can be inferred:
@@ -125,3 +130,4 @@ if __name__ == '__main__':
                         help='Whether to use weighted MSE loss.')
     PARSER.add_argument('--no_epochs', default=300, type=int)
     ARGS = PARSER.parse_args()
+    main(ARGS)
