@@ -101,7 +101,7 @@ def main(args):
     # We have an unbalanced dataset with many labels for rating 3 and 4, and very
     # few for 0 and 1, therefore we use a weighted MSE loss.
     if args.use_weighted_loss:
-        weight = torch.bincount(train_data['user', 'movie'].edge_label)
+        weight = torch.bincount(train_data['user', 'product'].edge_label)
         weight = weight.max() / weight
     else:
         weight = None
