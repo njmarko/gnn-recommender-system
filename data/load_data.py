@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import torch
 from collections import defaultdict
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 pd.set_option('display.max_columns', None)
 
@@ -54,9 +54,13 @@ def read_customers() -> tuple[pd.DataFrame, dict]:
     le.fit(users['customer_state'])
 
     users['customer_state_code'] = le.transform(users['customer_state'])
+    # TODO: See if pop2023 should be dropped as well
     users.drop(columns=['customer_state', 'customer_city', 'customer_zip_code_prefix', 'customer_id'], inplace=True)
-
     users.set_index('customer_unique_id', inplace=True)
+
+    scaler = StandardScaler()
+    columns_to_scale = ['population', 'grp_per_capita', 'pop2023']
+    users[columns_to_scale] = scaler.fit_transform(users[columns_to_scale])
 
     mapping = {index: i for i, index in enumerate(users.index.unique())}
 
@@ -89,6 +93,14 @@ def read_products(translate=False) -> tuple[pd.DataFrame, dict]:
         )
 
     products.drop(columns='product_category_name', inplace=True)
+
+    scaler = StandardScaler()
+    columns_to_scale = [
+        'product_name_length', 'product_description_length',
+        'product_weight_g',
+        'product_length_cm', 'product_width_cm', 'product_height_cm'
+    ]
+    products[columns_to_scale] = scaler.fit_transform(products[columns_to_scale])
 
     mapping = {index: i for i, index in enumerate(products.index.unique())}
 
