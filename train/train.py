@@ -1,4 +1,6 @@
 import argparse
+import os
+
 import torch
 
 import torch.nn.functional as F
@@ -8,6 +10,8 @@ from torch_geometric.transforms import RandomLinkSplit, ToUndirected
 from model.model import Model
 from data.load_data import read_customers, read_products, create_graph_edges
 import wandb
+import numpy as np
+from pathlib import Path
 
 
 def weighted_mse_loss(pred, target, weight=None):
@@ -123,6 +127,8 @@ def main(args):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
+    best_model_loss = np.Inf
+    best_model_path = None
     for epoch in range(1, args.no_epochs + 1):
         loss = train(model, train_data, optimizer, weight)
         train_rmse = test(model, train_data)
@@ -131,6 +137,16 @@ def main(args):
         wb_run_train.log({'train_epoch_loss': loss, 'val_epoch_loss': val_rmse})
         print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, Train: {train_rmse:.4f}, '
               f'Val: {val_rmse:.4f}, Test: {test_rmse:.4f}')
+        if val_rmse < best_model_loss:
+            best_model_loss = val_rmse
+            Path(f'../experiments/{args.group}').mkdir(exist_ok=True, parents=True)
+            new_best_path = os.path.join(f'../experiments/{args.group}',
+                                         f'train-{args.group}-{args.model}-epoch{epoch}'
+                                         f'-loss{val_rmse:.4f}.pt')
+            torch.save(model.state_dict(), new_best_path)
+            if best_model_path:
+                os.remove(best_model_path)
+            best_model_path = new_best_path
     wb_run_train.finish()
 
 
