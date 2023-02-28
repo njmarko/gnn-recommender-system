@@ -82,6 +82,13 @@ def read_products(translate=False) -> tuple[pd.DataFrame, dict]:
     products['product_category_name'].fillna('N/A', inplace=True)
     products.fillna(0, inplace=True)
 
+    product_purchase_prices = pd.read_csv('../data/ecommerce/olist_order_items_dataset.csv')[['product_id', 'price']]
+    product_purchase_prices = product_purchase_prices.groupby('product_id').mean()
+    products = pd.merge(products, product_purchase_prices, how='left', on='product_id')
+
+    products['price'].fillna(products['price'].mean())
+    print(products.head())
+
     le = LabelEncoder()
     le.fit(products['product_category_name'])
     products['product_category_code'] = le.transform(products['product_category_name'])
@@ -166,12 +173,12 @@ def create_graph_edges() -> pd.DataFrame:
 
 
 if __name__ == '__main__':
-    customers, customer_mapping = read_customers()
-    products, product_mapping = read_products()
+    _customers, customer_mapping = read_customers()
+    _products, product_mapping = read_products()
 
-    print(customers.columns)
-    print(products.columns)
-    print(products.columns)
+    print(_customers.columns)
+    print(_products.columns)
+    print(_products.columns)
 
-    print(customers.head().values)
-    print(products.head().values)
+    print(_customers.head().values)
+    print(_products.head().values)

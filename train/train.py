@@ -1,5 +1,6 @@
 import argparse
 import torch
+import random
 
 import torch.nn.functional as F
 from torch_geometric.data import HeteroData
@@ -58,6 +59,7 @@ def load_data():
     del data['product', 'rev_buys', 'customer'].edge_label
     # del data['product', 'rev_reviews', 'product'].edge_label
 
+    data.validate()
     return data
 
 
@@ -92,6 +94,30 @@ def test(model, data):
     target = data['customer', 'product'].edge_label.float()
     rmse = F.mse_loss(pred, target).sqrt()
     return float(rmse)
+
+
+@torch.no_grad()
+def top_at_k(model, src, dst, train_data, test_data, k=10):
+    customer_idx = random.randint(0, len(src)-1)
+    customer_row = torch.tensor([customer_idx] * len(dst))
+    all_product_ids = torch.arange(len(dst))
+    edge_label_index = torch.stack([customer_row, all_product_ids], dim=0)
+    pred = model(train_data.x_dict, train_data.edge_index_dict,
+                 edge_label_index)
+    pred = pred.clamp(min=0, max=5)
+
+    # we will only select movies for the user where the predicting rating is =5
+    rec_product_ids = (pred[:, 0] == 5).nonzero(as_tuple=True)
+    top_k_recommendations = [rec_product for rec_product in rec_product_ids[0].tolist()[:k]]
+
+    test_edge_label_index = test_data['customer', 'product'].edge_label_index
+    customer_interacted_products = test_edge_label_index[1, test_edge_label_index[0] == customer_idx]
+
+    hits = 0
+    for product_idx in top_k_recommendations:
+        if product_idx in customer_interacted_products: hits += 1
+
+    return hits / k
 
 
 def main(args):
