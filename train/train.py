@@ -103,7 +103,7 @@ def test(model, data):
 
 @torch.no_grad()
 def top_at_k(model, src, dst, train_data, test_data, k=10):
-    customer_idx = random.randint(0, len(src)-1)
+    customer_idx = random.randint(0, len(src) - 1)
     customer_row = torch.tensor([customer_idx] * len(dst))
     all_product_ids = torch.arange(len(dst))
     edge_label_index = torch.stack([customer_row, all_product_ids], dim=0)
@@ -126,6 +126,7 @@ def top_at_k(model, src, dst, train_data, test_data, k=10):
 
 
 def main(args):
+    args.device = 'cuda' if torch.cuda.is_available() and (args.device == 'cuda') else 'cpu'
     wb_run_train = wandb.init(entity=args.entity, project=args.project_name, group=args.group,
                               # save_code=True, # Pycharm complains about duplicate code fragments
                               job_type=args.job_type,
@@ -159,10 +160,9 @@ def main(args):
         loss = train(model, train_data, optimizer, weight)
         train_rmse = test(model, train_data)
         val_rmse = test(model, val_data)
-        test_rmse = test(model, test_data)
-        wb_run_train.log({'train_epoch_loss': loss, 'val_epoch_loss': val_rmse})
+        wb_run_train.log({'train_epoch_loss': loss, 'train_epoch_rmse': train_rmse, 'val_epoch_rmse': val_rmse})
         print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, Train: {train_rmse:.4f}, '
-              f'Val: {val_rmse:.4f}, Test: {test_rmse:.4f}')
+              f'Val: {val_rmse:.4f}')
         if val_rmse < best_model_loss:
             best_model_loss = val_rmse
             Path(f'../experiments/{args.group}').mkdir(exist_ok=True, parents=True)
@@ -174,6 +174,21 @@ def main(args):
                 os.remove(best_model_path)
             best_model_path = new_best_path
     wb_run_train.finish()
+
+    args.job_type = "eval"
+    wb_run_eval = wandb.init(entity=args.entity, project=args.project_name, group=args.group,
+                             # save_code=True, # Pycharm complains about duplicate code fragments
+                             job_type=args.job_type,
+                             tags=args.tags,
+                             name=f'{args.model}_eval',
+                             config=args,
+                             )
+    model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
+    model.load_state_dict(torch.load(best_model_path))
+    model.to(args.device)
+    test_rmse = test(model, test_data)
+    wandb.log({'test_loss': test_rmse})
+    wb_run_eval.finish()
 
 
 if __name__ == '__main__':
@@ -201,5 +216,7 @@ if __name__ == '__main__':
     PARSER.add_argument('-m', '--model', type=str.lower, default="GRAPH_SAGE",
                         choices=model_choices,
                         help=f"Model to be used for training {model_choices}")
+    # Training options
+    PARSER.add_argument('-device', '--device', type=str, default='cuda', help="Device to be used")
     ARGS = PARSER.parse_args()
     main(ARGS)
