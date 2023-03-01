@@ -146,6 +146,7 @@ def main(args):
         weight = None
 
     model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
+    # model.to(args.device)
 
     # Due to lazy initialization, we need to run one model step so the number
     # of parameters can be inferred:
@@ -185,9 +186,9 @@ def main(args):
                              )
     model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
     model.load_state_dict(torch.load(best_model_path))
-    model.to(args.device)
+    # model.to(args.device)
     test_rmse = test(model, test_data)
-    wb_run_eval.log({'test_loss': test_rmse})
+    wb_run_eval.log({'test_rmse': test_rmse})
     wb_run_eval.finish()
 
 
