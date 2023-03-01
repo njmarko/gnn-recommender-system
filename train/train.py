@@ -187,7 +187,7 @@ def main(args):
     model.load_state_dict(torch.load(best_model_path))
     model.to(args.device)
     test_rmse = test(model, test_data)
-    wandb.log({'test_loss': test_rmse})
+    wb_run_eval.log({'test_loss': test_rmse})
     wb_run_eval.finish()
 
 

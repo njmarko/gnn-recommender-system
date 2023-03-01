@@ -176,9 +176,9 @@ if __name__ == '__main__':
     _customers, customer_mapping = read_customers()
     _products, product_mapping = read_products()
 
-    print(_customers.columns)
-    print(_products.columns)
-    print(_products.columns)
-
-    print(_customers.head().values)
-    print(_products.head().values)
+    # print(_customers.columns)
+    # print(_products.columns)
+    # print(_products.columns)
+    #
+    # print(_customers.head().values)
+    # print(_products.head().values)
