@@ -176,18 +176,20 @@ def main(args):
 
     best_model_loss = np.Inf
     best_model_path = None
-    for epoch in range(1, args.no_epochs + 1):
+    for epoch in range(0, args.no_epochs):
         loss = train(model, train_data, optimizer, weight)
         train_rmse = test(model, train_data)
         val_rmse = test(model, val_data)
-        wb_run_train.log({'train_epoch_loss': loss, 'train_epoch_rmse': train_rmse, 'val_epoch_rmse': val_rmse})
-        print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, Train: {train_rmse:.4f}, '
+        if epoch % 10 == 0:
+            wb_run_train.log({'train_epoch_loss': loss, 'train_epoch_rmse': train_rmse,
+                              'val_epoch_rmse': val_rmse})
+        print(f'Epoch: {epoch + 1:03d}, Loss: {loss:.4f}, Train: {train_rmse:.4f}, '
               f'Val: {val_rmse:.4f}')
         if val_rmse < best_model_loss:
             best_model_loss = val_rmse
             Path(f'../experiments/{args.group}').mkdir(exist_ok=True, parents=True)
             new_best_path = os.path.join(f'../experiments/{args.group}',
-                                         f'train-{args.group}-{args.model}-epoch{epoch}'
+                                         f'train-{args.group}-{args.model}-epoch{epoch + 1}'
                                          f'-loss{val_rmse:.4f}.pt')
             torch.save(model.state_dict(), new_best_path)
             if best_model_path:
@@ -203,7 +205,10 @@ def main(args):
                              name=f'{args.model}_eval',
                              config=args,
                              )
-    model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
+    if args.model == 'graph_sage':
+        model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
+    elif args.model == 'meta_sage':
+        model = MetaSage(train_data['customer'].num_nodes, hidden_channels=64, out_channels=64)
     model.load_state_dict(torch.load(best_model_path))
     # model.to(args.device)
     test_rmse = test(model, test_data)
