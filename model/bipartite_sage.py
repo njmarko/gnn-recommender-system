@@ -1,10 +1,12 @@
 import torch
-from torch_geometric.nn import SAGEConv
 from torch.nn import Embedding, Linear
+from torch_geometric.nn import SAGEConv
 
 """
 Model based on https://github.com/pyg-team/pytorch_geometric/blob/master/examples/hetero/bipartite_sage.py
 """
+
+
 class ItemGNNEncoder(torch.nn.Module):
     def __init__(self, hidden_channels, out_channels):
         super().__init__()
@@ -28,29 +30,29 @@ class UserGNNEncoder(torch.nn.Module):
         self.lin = Linear(hidden_channels, out_channels)
 
     def forward(self, x_dict, edge_index_dict):
-        movie_x = self.conv1(
-            x_dict['item'],
-            edge_index_dict[('item', 'metapath_0', 'item')],
+        product_x = self.conv1(
+            x_dict['product'],
+            edge_index_dict[('product', 'metapath_0', 'product')],
         ).relu()
 
-        user_x = self.conv2(
-            (x_dict['item'], x_dict['user']),
-            edge_index_dict[('item', 'rev_rates', 'user')],
+        customer_x = self.conv2(
+            (x_dict['product'], x_dict['customer']),
+            edge_index_dict[('product', 'rev_buys', 'customer')],
         ).relu()
 
-        user_x = self.conv3(
-            (movie_x, user_x),
-            edge_index_dict[('item', 'rev_rates', 'user')],
+        customer_x = self.conv3(
+            (product_x, customer_x),
+            edge_index_dict[('product', 'rev_buys', 'customer')],
         ).relu()
 
-        return self.lin(user_x)
+        return self.lin(customer_x)
 
 
 class EdgeDecoder(torch.nn.Module):
     def __init__(self, hidden_channels):
         super().__init__()
         self.lin1 = Linear(2 * hidden_channels, hidden_channels)
-        self.lin2 = Linear(hidden_channels, 1)
+        self.lin2 = Linear(hidden_channels, 2)
 
     def forward(self, z_src, z_dst, edge_label_index):
         row, col = edge_label_index
@@ -58,23 +60,23 @@ class EdgeDecoder(torch.nn.Module):
 
         z = self.lin1(z).relu()
         z = self.lin2(z)
-        return z.view(-1)
+        return z
 
 
-class Model(torch.nn.Module):
-    def __init__(self, num_users, hidden_channels, out_channels):
+class MetaSage(torch.nn.Module):
+    def __init__(self, num_customers, hidden_channels, out_channels):
         super().__init__()
-        self.user_emb = Embedding(num_users, hidden_channels)
-        self.user_encoder = UserGNNEncoder(hidden_channels, out_channels)
-        self.movie_encoder = ItemGNNEncoder(hidden_channels, out_channels)
+        self.customer_emb = Embedding(num_customers, hidden_channels)
+        self.customer_encoder = UserGNNEncoder(hidden_channels, out_channels)
+        self.item_encoder = ItemGNNEncoder(hidden_channels, out_channels)
         self.decoder = EdgeDecoder(out_channels)
 
     def forward(self, x_dict, edge_index_dict, edge_label_index):
-        z_dict = {}
-        x_dict['user'] = self.user_emb(x_dict['user'])
-        z_dict['user'] = self.user_encoder(x_dict, edge_index_dict)
-        z_dict['item'] = self.movie_encoder(
-            x_dict['item'],
-            edge_index_dict[('item', 'metapath_0', 'item')],
-        )
-        return self.decoder(z_dict['user'], z_dict['item'], edge_label_index)
+        # x_dict['customer'] = self.customer_emb(x_dict['customer'])
+        z_dict = {
+            'customer': self.customer_encoder(x_dict, edge_index_dict),
+            'product': self.item_encoder(
+                x_dict['product'],
+                edge_index_dict[('product', 'metapath_0', 'product')],
+            )}
+        return self.decoder(z_dict['customer'], z_dict['product'], edge_label_index)

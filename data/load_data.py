@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import torch
-from collections import defaultdict
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 pd.set_option('display.max_columns', None)

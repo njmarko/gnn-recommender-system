@@ -1,18 +1,20 @@
 import argparse
 import os
-
-import torch
 import random
+from pathlib import Path
 
+import numpy as np
+import torch
 import torch.nn.functional as F
+import torch_geometric.transforms as T
 from torch_geometric.data import HeteroData
+from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.transforms import RandomLinkSplit, ToUndirected
 
-from model.model import Model
-from data.load_data import read_customers, read_products, create_graph_edges
 import wandb
-import numpy as np
-from pathlib import Path
+from data.load_data import read_customers, read_products, create_graph_edges
+from model.bipartite_sage import MetaSage
+from model.model import Model
 
 
 def weighted_mse_loss(pred, target, weight=None):
@@ -25,7 +27,7 @@ def weighted_mse_loss(pred, target, weight=None):
     return loss
 
 
-def load_data():
+def load_data(args):
     customers, customer_mappings = read_customers()
     products, product_mappings = read_products()
 
@@ -59,9 +61,24 @@ def load_data():
     #
     # data['customer', 'reviews', 'product'].edge_index = review_edge_index
     # data['customer', 'reviews', 'product'].edge_label = review_edge_label
-
     data = ToUndirected()(data)
-    del data['product', 'rev_buys', 'customer'].edge_label
+    if args.model != "meta_sage":
+        del data['product', 'rev_buys', 'customer'].edge_label
+
+    if args.model == "meta_sage":
+        # Generate the co-occurence matrix of movies<>movies:
+        metapath = [('product', 'rev_buys', 'customer'), ('customer', 'buys', 'product')]
+        data = T.AddMetaPaths(metapaths=[metapath])(data)
+
+        # Apply normalization to filter the metapath:
+        _, edge_weight = gcn_norm(
+            data['product', 'product'].edge_index,
+            num_nodes=data['product'].num_nodes,
+            add_self_loops=False,
+        )
+        edge_index = data['product', 'product'].edge_index[:, edge_weight > 0.002]
+        data['product', 'metapath_0', 'product'].edge_index = edge_index
+
     # del data['product', 'rev_reviews', 'product'].edge_label
 
     data.validate()
@@ -134,7 +151,7 @@ def main(args):
                               name=f'{args.model}_train',
                               config=args,
                               )
-    graph_data = load_data()
+    graph_data = load_data(args)
     train_data, val_data, test_data = split_data(graph_data)
 
     # We have an unbalanced dataset with many labels for rating 3 and 4, and very
@@ -144,15 +161,17 @@ def main(args):
         weight = weight.max() / weight
     else:
         weight = None
-
-    model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
+    if args.model == 'graph_sage':
+        model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
+    elif args.model == 'meta_sage':
+        model = MetaSage(train_data['customer'].num_nodes, hidden_channels=64, out_channels=64)
     # model.to(args.device)
 
     # Due to lazy initialization, we need to run one model step so the number
     # of parameters can be inferred:
     with torch.no_grad():
-        model.encoder(train_data.x_dict, train_data.edge_index_dict)
-
+        if args.model == 'graph_sage':
+            model.encoder(train_data.x_dict, train_data.edge_index_dict)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     best_model_loss = np.Inf
@@ -213,8 +232,8 @@ if __name__ == '__main__':
     PARSER.add_argument('-tags', '--tags', nargs="*", type=str, default="train",
                         help="Add a list of tags that describe the run.")
     # Model options
-    model_choices = ['GRAPH_SAGE']
-    PARSER.add_argument('-m', '--model', type=str.lower, default="GRAPH_SAGE",
+    model_choices = ['graph_sage', 'meta_sage']
+    PARSER.add_argument('-m', '--model', type=str.lower, default="graph_sage",
                         choices=model_choices,
                         help=f"Model to be used for training {model_choices}")
     # Training options
