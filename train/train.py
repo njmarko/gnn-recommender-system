@@ -11,7 +11,7 @@ from torch_geometric.data import HeteroData
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.transforms import RandomLinkSplit, ToUndirected
 
-import wandb
+# import wandb
 from data.load_data import read_customers, read_products, create_graph_edges
 from model.bipartite_sage import MetaSage
 from model.model import Model
@@ -144,13 +144,13 @@ def top_at_k(model, src, dst, train_data, test_data, k=10):
 
 def main(args):
     args.device = 'cuda' if torch.cuda.is_available() and (args.device == 'cuda') else 'cpu'
-    wb_run_train = wandb.init(entity=args.entity, project=args.project_name, group=args.group,
-                              # save_code=True, # Pycharm complains about duplicate code fragments
-                              job_type=args.job_type,
-                              tags=args.tags,
-                              name=f'{args.model}_train',
-                              config=args,
-                              )
+    # wb_run_train = wandb.init(entity=args.entity, project=args.project_name, group=args.group,
+    #                           # save_code=True, # Pycharm complains about duplicate code fragments
+    #                           job_type=args.job_type,
+    #                           tags=args.tags,
+    #                           name=f'{args.model}_train',
+    #                           config=args,
+    #                           )
     graph_data = load_data(args)
     train_data, val_data, test_data = split_data(graph_data)
 
@@ -180,9 +180,9 @@ def main(args):
         loss = train(model, train_data, optimizer, weight)
         train_rmse = test(model, train_data)
         val_rmse = test(model, val_data)
-        if epoch % 10 == 0:
-            wb_run_train.log({'train_epoch_loss': loss, 'train_epoch_rmse': train_rmse,
-                              'val_epoch_rmse': val_rmse})
+        # if epoch % 10 == 0:
+        #     wb_run_train.log({'train_epoch_loss': loss, 'train_epoch_rmse': train_rmse,
+        #                       'val_epoch_rmse': val_rmse})
         print(f'Epoch: {epoch + 1:03d}, Loss: {loss:.4f}, Train: {train_rmse:.4f}, '
               f'Val: {val_rmse:.4f}')
         if val_rmse < best_model_loss:
@@ -195,16 +195,16 @@ def main(args):
             if best_model_path:
                 os.remove(best_model_path)
             best_model_path = new_best_path
-    wb_run_train.finish()
+    # wb_run_train.finish()
 
     args.job_type = "eval"
-    wb_run_eval = wandb.init(entity=args.entity, project=args.project_name, group=args.group,
-                             # save_code=True, # Pycharm complains about duplicate code fragments
-                             job_type=args.job_type,
-                             tags=args.tags,
-                             name=f'{args.model}_eval',
-                             config=args,
-                             )
+    # wb_run_eval = wandb.init(entity=args.entity, project=args.project_name, group=args.group,
+    #                          # save_code=True, # Pycharm complains about duplicate code fragments
+    #                          job_type=args.job_type,
+    #                          tags=args.tags,
+    #                          name=f'{args.model}_eval',
+    #                          config=args,
+    #                          )
     if args.model == 'graph_sage':
         model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
     elif args.model == 'meta_sage':
@@ -212,8 +212,8 @@ def main(args):
     model.load_state_dict(torch.load(best_model_path))
     # model.to(args.device)
     test_rmse = test(model, test_data)
-    wb_run_eval.log({'test_rmse': test_rmse})
-    wb_run_eval.finish()
+    # wb_run_eval.log({'test_rmse': test_rmse})
+    # wb_run_eval.finish()
 
 
 if __name__ == '__main__':
