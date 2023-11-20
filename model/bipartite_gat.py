@@ -22,27 +22,31 @@ class ItemGNNEncoder(torch.nn.Module):
 
 
 class UserGNNEncoder(torch.nn.Module):
-    def __init__(self, hidden_channels, out_channels):
+    def __init__(self, hidden_channels, out_channels, edge_channels):
         super().__init__()
         self.conv1 = GATv2Conv((-1, -1), hidden_channels)
-        self.conv2 = GATv2Conv((-1, -1), hidden_channels)
-        self.conv3 = GATv2Conv((-1, -1), hidden_channels)
+        self.conv2 = GATv2Conv((-1, -1), hidden_channels, edge_dim=edge_channels, add_self_loops=False)
+        self.conv3 = GATv2Conv((-1, -1), hidden_channels, edge_dim=edge_channels, add_self_loops=False)
         self.lin = Linear(hidden_channels, out_channels)
 
-    def forward(self, x_dict, edge_index_dict):
+    def forward(self, x_dict, edge_index_dict, edge_label):
         product_x = self.conv1(
             x_dict['product'],
             edge_index_dict[('product', 'metapath_0', 'product')],
         ).relu()
-
+        a1 = edge_index_dict[('product', 'rev_buys', 'customer')]
+        a2 = edge_label
         customer_x = self.conv2(
             (x_dict['product'], x_dict['customer']),
             edge_index_dict[('product', 'rev_buys', 'customer')],
+            edge_attr=edge_label
+            # consider using metapaths for customers
         ).relu()
 
         customer_x = self.conv3(
             (product_x, customer_x),
             edge_index_dict[('product', 'rev_buys', 'customer')],
+            edge_attr=edge_label
         ).relu()
 
         return self.lin(customer_x)
@@ -52,7 +56,7 @@ class EdgeDecoder(torch.nn.Module):
     def __init__(self, hidden_channels):
         super().__init__()
         self.lin1 = Linear(2 * hidden_channels, hidden_channels)
-        self.lin2 = Linear(hidden_channels, 2)
+        self.lin2 = Linear(hidden_channels, 1)
 
     def forward(self, z_src, z_dst, edge_label_index):
         row, col = edge_label_index
@@ -64,17 +68,17 @@ class EdgeDecoder(torch.nn.Module):
 
 
 class MetaGATv2(torch.nn.Module):
-    def __init__(self, num_customers, hidden_channels, out_channels):
+    def __init__(self, num_customers, hidden_channels, out_channels, edge_channels=1):
         super().__init__()
         self.customer_emb = Embedding(num_customers, hidden_channels)
-        self.customer_encoder = UserGNNEncoder(hidden_channels, out_channels)
+        self.customer_encoder = UserGNNEncoder(hidden_channels, out_channels, edge_channels=edge_channels)
         self.item_encoder = ItemGNNEncoder(hidden_channels, out_channels)
         self.decoder = EdgeDecoder(out_channels)
 
-    def forward(self, x_dict, edge_index_dict, edge_label_index):
+    def forward(self, x_dict, edge_index_dict, edge_label_index, edge_label=None):
         # x_dict['customer'] = self.customer_emb(x_dict['customer'])
         z_dict = {
-            'customer': self.customer_encoder(x_dict, edge_index_dict),
+            'customer': self.customer_encoder(x_dict, edge_index_dict, edge_label),
             'product': self.item_encoder(
                 x_dict['product'],
                 edge_index_dict[('product', 'metapath_0', 'product')],

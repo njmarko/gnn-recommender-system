@@ -21,8 +21,8 @@ from model.model import Model
 def weighted_mse_loss(pred, target, weight=None):
     weight = 1. if weight is None else weight[target].to(pred.dtype)
     diff = pred - target.to(pred.dtype)
-    weighted_diff = weight * diff
-    sum_loss = weighted_diff.pow(2)
+    weighted_diff = weight * diff.pow(2)
+    sum_loss = weighted_diff
     loss = sum_loss.mean()
     # loss = (weight * (pred - target.to(pred.dtype)).pow(2)).mean()
     return loss
@@ -39,6 +39,7 @@ def load_data(args):
     edge_attrs = [
         torch.tensor(graph_edge_data[column].values).unsqueeze(dim=1) for column in ['review_score', 'purchase_count']
     ]
+    # If we want all values on the edge
     edge_label = torch.cat(edge_attrs, dim=-1).to(torch.float32)
 
     review_edge_index = edge_index
@@ -56,6 +57,7 @@ def load_data(args):
 
     data['customer', 'buys', 'product'].edge_index = edge_index
     data['customer', 'buys', 'product'].edge_label = edge_label
+    # data['customer', 'buys', 'product'].edge_label = review_edge_label
 
     # data['customer', 'buys', 'product'].edge_index = purchase_edge_index
     # data['customer', 'buys', 'product'].edge_label = purchase_edge_label
@@ -63,8 +65,9 @@ def load_data(args):
     # data['customer', 'reviews', 'product'].edge_index = review_edge_index
     # data['customer', 'reviews', 'product'].edge_label = review_edge_label
     data = ToUndirected()(data)
-    if args.model not in ["meta_sage", "meta_gatv2"]:
-        del data['product', 'rev_buys', 'customer'].edge_label
+    # if args.model not in ["meta_sage", "meta_gatv2"]:
+        # del data['product', 'rev_buys', 'customer'].edge_label
+    # del data['product', 'rev_buys', 'customer'].edge_label
 
     if args.model in ["meta_sage", "meta_gatv2"]:
         # Generate the co-occurence matrix of movies<>movies:
@@ -90,6 +93,7 @@ def split_data(data, val_ratio=0.1, test_ratio=0.1):
     transform = RandomLinkSplit(
         num_val=val_ratio,
         num_test=test_ratio,
+        is_undirected=True,
         neg_sampling_ratio=0.0,
         edge_types=[('customer', 'buys', 'product')],
         rev_edge_types=[('product', 'rev_buys', 'customer')],
@@ -101,8 +105,11 @@ def train(model, data, optimizer, weight=None):
     model.train()
     optimizer.zero_grad()
     pred = model(data.x_dict, data.edge_index_dict,
-                 data['customer', 'product'].edge_label_index)
-    target = data['customer', 'product'].edge_label
+                 data['customer', 'product'].edge_label_index,
+                 edge_label=data['product', 'rev_buys', 'customer'].edge_label[:,1].reshape((-1,1))
+                 )
+    target = data['customer', 'product'].edge_label[:,0]
+    print(f"target shape {target.shape}")
     loss = weighted_mse_loss(pred, target, weight)
     loss.backward()
     optimizer.step()
@@ -112,9 +119,11 @@ def train(model, data, optimizer, weight=None):
 @torch.no_grad()
 def test(model, data):
     pred = model(data.x_dict, data.edge_index_dict,
-                 data['customer', 'product'].edge_label_index)
+                 data['customer', 'product'].edge_label_index,
+                 edge_label=data['product', 'rev_buys', 'customer'].edge_label[:,1].reshape((-1,1))
+                 )
     pred = pred.clamp(min=0, max=5)
-    target = data['customer', 'product'].edge_label.float()
+    target = data['customer', 'product'].edge_label[:,0].float()
     rmse = F.mse_loss(pred, target).sqrt()
     return float(rmse)
 
@@ -167,7 +176,7 @@ def main(args):
     elif args.model == 'meta_sage':
         model = MetaSage(train_data['customer'].num_nodes, hidden_channels=64, out_channels=64)
     elif args.model == 'meta_gatv2':
-        model = MetaGATv2(train_data['customer'].num_nodes, hidden_channels=64, out_channels=64)
+        model = MetaGATv2(train_data['customer'].num_nodes, hidden_channels=args.hidden_channels, out_channels=args.out_channels, edge_channels=args.edge_channels)
     # model.to(args.device)
 
     # Due to lazy initialization, we need to run one model step so the number
@@ -246,6 +255,9 @@ if __name__ == '__main__':
     PARSER.add_argument('-m', '--model', type=str.lower, default="meta_gatv2",
                         choices=model_choices,
                         help=f"Model to be used for training {model_choices}")
+    PARSER.add_argument('--hidden_channels', default=64, type=int)
+    PARSER.add_argument('--out_channels', default=64, type=int)
+    PARSER.add_argument('--edge_channels', default=1, type=int)
     # Training options
     PARSER.add_argument('-device', '--device', type=str, default='cuda', help="Device to be used")
     ARGS = PARSER.parse_args()
