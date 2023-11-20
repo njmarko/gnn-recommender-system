@@ -21,11 +21,11 @@ def sort_cities(population):
 
 
 def read_customers() -> tuple[pd.DataFrame, dict]:
-    users = pd.read_csv('../data/ecommerce/olist_customers_dataset.csv')
-    st_inhabitants = pd.read_csv('../data/ecommerce/br_state_inhabitants.csv')
-    st_codes = pd.read_csv('../data/ecommerce/br_state_codes.csv')
-    st_grp = pd.read_csv('../data/ecommerce/br_state_grp.csv')  # gross regional product
-    ct_inhabitants = pd.read_csv('../data/ecommerce/br_cities_population.csv')
+    users = pd.read_csv('data/ecommerce/olist_customers_dataset.csv')
+    st_inhabitants = pd.read_csv('data/ecommerce/br_state_inhabitants.csv')
+    st_codes = pd.read_csv('data/ecommerce/br_state_codes.csv')
+    st_grp = pd.read_csv('data/ecommerce/br_state_grp.csv')  # gross regional product
+    ct_inhabitants = pd.read_csv('data/ecommerce/br_cities_population.csv')
 
     st_inhabitants['population'] /= 1000    # convert to milli vanillions
     st_inhabitants = pd.merge(
@@ -67,7 +67,7 @@ def read_customers() -> tuple[pd.DataFrame, dict]:
 
 
 def read_product_translations():
-    translations = pd.read_csv('../data/ecommerce/product_category_name_translation.csv')
+    translations = pd.read_csv('data/ecommerce/product_category_name_translation.csv')
     return translations
 
 
@@ -77,11 +77,11 @@ def get_product_translation(product, translation_df):
 
 
 def read_products(translate=False) -> tuple[pd.DataFrame, dict]:
-    products = pd.read_csv('../data/ecommerce/olist_products_dataset.csv', index_col='product_id')
+    products = pd.read_csv('data/ecommerce/olist_products_dataset.csv', index_col='product_id')
     products['product_category_name'].fillna('N/A', inplace=True)
     products.fillna(0, inplace=True)
 
-    product_purchase_prices = pd.read_csv('../data/ecommerce/olist_order_items_dataset.csv')[['product_id', 'price']]
+    product_purchase_prices = pd.read_csv('data/ecommerce/olist_order_items_dataset.csv')[['product_id', 'price']]
     product_purchase_prices = product_purchase_prices.groupby('product_id').mean()
     products = pd.merge(products, product_purchase_prices, how='left', on='product_id')
 
@@ -132,10 +132,10 @@ class Edge:
 
 
 def create_graph_edges() -> pd.DataFrame:
-    orders = pd.read_csv('../data/ecommerce/olist_orders_dataset.csv')
-    order_items = pd.read_csv('../data/ecommerce/olist_order_items_dataset.csv')
-    users = pd.read_csv('../data/ecommerce/olist_customers_dataset.csv')
-    ratings = pd.read_csv('../data/ecommerce/olist_order_reviews_dataset.csv')
+    orders = pd.read_csv('data/ecommerce/olist_orders_dataset.csv')
+    order_items = pd.read_csv('data/ecommerce/olist_order_items_dataset.csv')
+    users = pd.read_csv('data/ecommerce/olist_customers_dataset.csv')
+    ratings = pd.read_csv('data/ecommerce/olist_order_reviews_dataset.csv')
 
     # Ne bi trebalo da moze da vise review-ova ima isti review_id
     # Ne bi trebalo da moze da vise review-ova ocenjuju istu narudzbinu

@@ -133,3 +133,8 @@ experiments/*
 train/wandb
 .idea/
 data/ecommerce.zip
+wandb
+# Ignore vim files:
+*~
+*.swp
+*.swo
