@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from datetime import datetime
 
 pd.set_option('display.max_columns', None)
 
@@ -131,6 +132,16 @@ class Edge:
         return torch.Tensor([self.rating, self.product_purchase_count])
 
 
+
+def convert_to_unix_timestamp(timestamp_str, format='%Y-%m-%d %H:%M:%S'):
+    # Convert string to datetime object
+    dt_object = datetime.strptime(timestamp_str, format)
+
+    # Convert datetime object to Unix timestamp
+    unix_timestamp = int(dt_object.timestamp())
+
+    return unix_timestamp
+
 def create_graph_edges() -> pd.DataFrame:
     orders = pd.read_csv('data/ecommerce/olist_orders_dataset.csv')
     order_items = pd.read_csv('data/ecommerce/olist_order_items_dataset.csv')
@@ -168,7 +179,9 @@ def create_graph_edges() -> pd.DataFrame:
     # print(user_items[['customer_unique_id', 'product_id', 'review_score']]
     #       [user_items['order_id'] == '005d9a5423d47281ac463a968b3936fb' ])  # '001ab0a7578dd66cd4b0a71f5b6e1e41'])
 
-    return user_items[['customer_unique_id', 'product_id', 'review_score', 'purchase_count']]
+    user_items['timestamp'] = pd.to_numeric(pd.to_datetime(user_items['order_purchase_timestamp'])).astype(int) // 10**9
+
+    return user_items[['customer_unique_id', 'product_id', 'review_score', 'purchase_count', 'timestamp']]
 
 
 if __name__ == '__main__':

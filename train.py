@@ -37,7 +37,7 @@ def load_data(args):
     dst = [product_mappings[index] for index in graph_edge_data['product_id']]
     edge_index = torch.tensor([src, dst])
     edge_attrs = [
-        torch.tensor(graph_edge_data[column].values).unsqueeze(dim=1) for column in ['review_score', 'purchase_count']
+        torch.tensor(graph_edge_data[column].values).unsqueeze(dim=1) for column in ['review_score', 'purchase_count','timestamp']
     ]
     # If we want all values on the edge
     edge_label = torch.cat(edge_attrs, dim=-1).to(torch.float32)
@@ -106,7 +106,7 @@ def train(model, data, optimizer, weight=None):
     optimizer.zero_grad()
     pred = model(data.x_dict, data.edge_index_dict,
                  data['customer', 'product'].edge_label_index,
-                 edge_label=data['product', 'rev_buys', 'customer'].edge_label[:,1]
+                 edge_label=data['product', 'rev_buys', 'customer'].edge_label[:,1:]
                  ).squeeze(axis=-1)
     target = data['customer', 'product'].edge_label[:,0]
     loss = weighted_mse_loss(pred, target, weight)
@@ -119,7 +119,7 @@ def train(model, data, optimizer, weight=None):
 def test(model, data):
     pred = model(data.x_dict, data.edge_index_dict,
                  data['customer', 'product'].edge_label_index,
-                 edge_label=data['product', 'rev_buys', 'customer'].edge_label[:,1]
+                 edge_label=data['product', 'rev_buys', 'customer'].edge_label[:,1:]
                  ).squeeze(axis=-1)
     pred = pred.clamp(min=0, max=5)
     target = data['customer', 'product'].edge_label[:,0].float()
@@ -256,7 +256,7 @@ if __name__ == '__main__':
                         help=f"Model to be used for training {model_choices}")
     PARSER.add_argument('--hidden_channels', default=64, type=int)
     PARSER.add_argument('--out_channels', default=64, type=int)
-    PARSER.add_argument('--edge_channels', default=1, type=int)
+    PARSER.add_argument('--edge_channels', default=2, type=int)
     # Training options
     PARSER.add_argument('-device', '--device', type=str, default='cuda', help="Device to be used")
     ARGS = PARSER.parse_args()
