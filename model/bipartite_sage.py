@@ -52,7 +52,7 @@ class EdgeDecoder(torch.nn.Module):
     def __init__(self, hidden_channels):
         super().__init__()
         self.lin1 = Linear(2 * hidden_channels, hidden_channels)
-        self.lin2 = Linear(hidden_channels, 2)
+        self.lin2 = Linear(hidden_channels, 1)
 
     def forward(self, z_src, z_dst, edge_label_index):
         row, col = edge_label_index
@@ -71,7 +71,7 @@ class MetaSage(torch.nn.Module):
         self.item_encoder = ItemGNNEncoder(hidden_channels, out_channels)
         self.decoder = EdgeDecoder(out_channels)
 
-    def forward(self, x_dict, edge_index_dict, edge_label_index):
+    def forward(self, x_dict, edge_index_dict, edge_label_index, *args, **kwargs):
         # x_dict['customer'] = self.customer_emb(x_dict['customer'])
         z_dict = {
             'customer': self.customer_encoder(x_dict, edge_index_dict),

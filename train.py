@@ -202,7 +202,7 @@ def main(args):
     with torch.no_grad():
         if args.model == 'graph_sage':
             model.encoder(train_data.x_dict, train_data.edge_index_dict)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     best_model_loss = np.Inf
     best_model_path = None
@@ -238,7 +238,7 @@ def main(args):
     if args.model == 'graph_sage':
         model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
     elif args.model == 'meta_sage':
-        model = MetaSage(train_data['customer'].num_nodes, hidden_channels=64, out_channels=64)
+        model = MetaSage(train_data['customer'].num_nodes, hidden_channels=args.hidden_channels, out_channels=args.out_channels)
     elif args.model == 'meta_gatv2':
         model = MetaGATv2(train_data['customer'].num_nodes, hidden_channels=args.hidden_channels, out_channels=args.out_channels, edge_channels=args.edge_channels)
     model.load_state_dict(torch.load(best_model_path))
@@ -280,5 +280,7 @@ if __name__ == '__main__':
     PARSER.add_argument('-device', '--device', type=str, default='cuda', help="Device to be used")
     PARSER.add_argument('--val_split', default=0.15, type=float)
     PARSER.add_argument('--test_split', default=0.15, type=float)
+    PARSER.add_argument('--lr', default=0.01, type=float)
+
     ARGS = PARSER.parse_args()
     main(ARGS)

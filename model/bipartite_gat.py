@@ -34,8 +34,6 @@ class UserGNNEncoder(torch.nn.Module):
             x_dict['product'],
             edge_index_dict[('product', 'metapath_0', 'product')],
         ).relu()
-        a1 = edge_index_dict[('product', 'rev_buys', 'customer')]
-        a2 = edge_label
         customer_x = self.conv2(
             (x_dict['product'], x_dict['customer']),
             edge_index_dict[('product', 'rev_buys', 'customer')],
