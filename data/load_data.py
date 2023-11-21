@@ -179,11 +179,8 @@ def create_graph_edges() -> pd.DataFrame:
     # print(user_items[['customer_unique_id', 'product_id', 'review_score']]
     #       [user_items['order_id'] == '005d9a5423d47281ac463a968b3936fb' ])  # '001ab0a7578dd66cd4b0a71f5b6e1e41'])
 
-    sc_timestamp = StandardScaler()
     user_items['timestamp'] = pd.to_datetime(user_items['order_purchase_timestamp'])
     user_items['timestamp'] = pd.to_numeric(user_items['timestamp']) // 10**9
-    timestamp_2d = user_items['timestamp'].values.reshape(-1, 1)
-    user_items['timestamp'] = sc_timestamp.fit_transform(timestamp_2d)
 
     return user_items[['customer_unique_id', 'product_id', 'review_score', 'purchase_count', 'timestamp']]
 

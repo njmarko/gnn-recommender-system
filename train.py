@@ -10,6 +10,7 @@ import torch_geometric.transforms as T
 from torch_geometric.data import HeteroData
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.transforms import RandomLinkSplit, ToUndirected
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 import wandb
 from data.load_data import read_customers, read_products, create_graph_edges
@@ -162,6 +163,23 @@ def main(args):
                               )
     graph_data = load_data(args)
     train_data, val_data, test_data = split_data(graph_data)
+
+    standard_scaler_edge = StandardScaler()
+
+    edge_attr = train_data['customer','buys','product'].edge_label[:,1:]
+    train_data['customer','buys','product'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.fit_transform(edge_attr)).float()
+    edge_attr = train_data['product','rev_buys','customer'].edge_label[:,1:]
+    train_data['product', 'rev_buys', 'customer'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.transform(edge_attr)).float()
+
+    edge_attr = val_data['customer','buys','product'].edge_label[:,1:]
+    val_data['customer','buys','product'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.transform(edge_attr)).float()
+    edge_attr = val_data['product','rev_buys','customer'].edge_label[:,1:]
+    val_data['product', 'rev_buys', 'customer'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.transform(edge_attr)).float()
+
+    edge_attr = test_data['customer','buys','product'].edge_label[:,1:]
+    test_data['customer','buys','product'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.transform(edge_attr)).float()
+    edge_attr = test_data['product','rev_buys','customer'].edge_label[:,1:]
+    test_data['product', 'rev_buys', 'customer'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.transform(edge_attr)).float()
 
     # We have an unbalanced dataset with many labels for rating 3 and 4, and very
     # few for 0 and 1, therefore we use a weighted MSE loss.
