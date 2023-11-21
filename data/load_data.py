@@ -55,6 +55,7 @@ def read_customers() -> tuple[pd.DataFrame, dict]:
     users['customer_state_code'] = le.transform(users['customer_state'])
     # TODO: See if pop2023 should be dropped as well
     users.drop(columns=['customer_state', 'customer_city', 'customer_zip_code_prefix', 'customer_id'], inplace=True)
+    # users.drop(columns=['customer_state', 'customer_zip_code_prefix', 'customer_id'], inplace=True)
     users.set_index('customer_unique_id', inplace=True)
 
     scaler = StandardScaler()
@@ -173,9 +174,24 @@ def create_graph_edges() -> pd.DataFrame:
 
 if __name__ == '__main__':
     _customers, customer_mapping = read_customers()
-    _products, product_mapping = read_products()
 
-    # print(_customers.columns)
+    print(_customers.columns)
+
+    cities_count = (
+        _customers[_customers['living_category'] > 1]  # don't look up data for small or rural places
+        .value_counts('customer_city')
+        .to_frame('customers_count')
+        .reset_index()
+        .sort_values(by='customers_count', ascending=False)
+    )
+    cities_count['customer_city_link'] = cities_count['customer_city'].str.replace(' ', '-')
+    print(cities_count.head(15))
+    print(cities_count[cities_count['customers_count'] > 10].shape[0])
+
+    # https://livingcost.org/cost/brazil/<city-name> for cost of living scraping
+    # TODO: install selenium for scraping, and scrape for this
+
+
     # print(_products.columns)
     # print(_products.columns)
     #
