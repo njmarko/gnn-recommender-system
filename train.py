@@ -10,8 +10,9 @@ import torch_geometric.transforms as T
 from torch_geometric.data import HeteroData
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.transforms import RandomLinkSplit, ToUndirected
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 
-# import wandb
+import wandb
 from data.load_data import read_customers, read_products, create_graph_edges
 from model.bipartite_sage import MetaSage
 from model.bipartite_gat import MetaGATv2
@@ -19,12 +20,12 @@ from model.model import Model
 
 
 def weighted_mse_loss(pred, target, weight=None):
-    weight = 1. if weight is None else weight[target].to(pred.dtype)
+    weight = torch.tensor([1.]) if weight is None else weight[target.to('cpu').long()].to(pred.dtype)
     # diff = pred - target.to(pred.dtype)
     # weighted_diff = weight * diff.pow(2)
     # sum_loss = weighted_diff
     # loss = sum_loss.mean()
-    loss = (weight * (pred - target.to(pred.dtype)).pow(2)).mean()
+    loss = (weight.to(pred.device) * (pred - target.to(pred.dtype)).pow(2)).mean()
     return loss
 
 
@@ -37,7 +38,7 @@ def load_data(args):
     dst = [product_mappings[index] for index in graph_edge_data['product_id']]
     edge_index = torch.tensor([src, dst])
     edge_attrs = [
-        torch.tensor(graph_edge_data[column].values).unsqueeze(dim=1) for column in ['review_score', 'purchase_count']
+        torch.tensor(graph_edge_data[column].values).unsqueeze(dim=1) for column in ['review_score', 'purchase_count','timestamp']
     ]
     # If we want all values on the edge
     edge_label = torch.cat(edge_attrs, dim=-1).to(torch.float32)
@@ -89,7 +90,7 @@ def load_data(args):
     return data
 
 
-def split_data(data, val_ratio=0.1, test_ratio=0.1):
+def split_data(data, val_ratio=0.15, test_ratio=0.15):
     transform = RandomLinkSplit(
         num_val=val_ratio,
         num_test=test_ratio,
@@ -106,7 +107,7 @@ def train(model, data, optimizer, weight=None):
     optimizer.zero_grad()
     pred = model(data.x_dict, data.edge_index_dict,
                  data['customer', 'product'].edge_label_index,
-                 edge_label=data['product', 'rev_buys', 'customer'].edge_label[:,1]
+                 edge_label=data['product', 'rev_buys', 'customer'].edge_label[:,1:]
                  ).squeeze(axis=-1)
     target = data['customer', 'product'].edge_label[:,0]
     loss = weighted_mse_loss(pred, target, weight)
@@ -119,7 +120,7 @@ def train(model, data, optimizer, weight=None):
 def test(model, data):
     pred = model(data.x_dict, data.edge_index_dict,
                  data['customer', 'product'].edge_label_index,
-                 edge_label=data['product', 'rev_buys', 'customer'].edge_label[:,1]
+                 edge_label=data['product', 'rev_buys', 'customer'].edge_label[:,1:]
                  ).squeeze(axis=-1)
     pred = pred.clamp(min=0, max=5)
     target = data['customer', 'product'].edge_label[:,0].float()
@@ -153,47 +154,65 @@ def top_at_k(model, src, dst, train_data, test_data, k=10):
 
 def main(args):
     args.device = 'cuda' if torch.cuda.is_available() and (args.device == 'cuda') else 'cpu'
-    # wb_run_train = wandb.init(entity=args.entity, project=args.project_name, group=args.group,
-    #                           # save_code=True, # Pycharm complains about duplicate code fragments
-    #                           job_type=args.job_type,
-    #                           tags=args.tags,
-    #                           name=f'{args.model}_train',
-    #                           config=args,
-    #                           )
+    wb_run_train = wandb.init(entity=args.entity, project=args.project_name, group=args.group,
+                              # save_code=True, # Pycharm complains about duplicate code fragments
+                              job_type=args.job_type,
+                              tags=args.tags,
+                              name=f'{args.model}_train',
+                              config=args,
+                              )
     graph_data = load_data(args)
-    train_data, val_data, test_data = split_data(graph_data)
+    train_data, val_data, test_data = split_data(graph_data, args.val_split, args.test_split)
+
+    standard_scaler_edge = StandardScaler()
+
+    edge_attr = train_data['customer','buys','product'].edge_label[:,1:]
+    train_data['customer','buys','product'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.fit_transform(edge_attr)).float()
+    edge_attr = train_data['product','rev_buys','customer'].edge_label[:,1:]
+    train_data['product', 'rev_buys', 'customer'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.transform(edge_attr)).float()
+
+    edge_attr = val_data['customer','buys','product'].edge_label[:,1:]
+    val_data['customer','buys','product'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.transform(edge_attr)).float()
+    edge_attr = val_data['product','rev_buys','customer'].edge_label[:,1:]
+    val_data['product', 'rev_buys', 'customer'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.transform(edge_attr)).float()
+
+    edge_attr = test_data['customer','buys','product'].edge_label[:,1:]
+    test_data['customer','buys','product'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.transform(edge_attr)).float()
+    edge_attr = test_data['product','rev_buys','customer'].edge_label[:,1:]
+    test_data['product', 'rev_buys', 'customer'].edge_label[:,1:] = torch.from_numpy(standard_scaler_edge.transform(edge_attr)).float()
 
     # We have an unbalanced dataset with many labels for rating 3 and 4, and very
     # few for 0 and 1, therefore we use a weighted MSE loss.
     if args.use_weighted_loss:
-        weight = torch.bincount(train_data['customer', 'product'].edge_label)
+        weight = torch.bincount(train_data['customer', 'product'].edge_label[:,0].long())
         weight = weight.max() / weight
+        weight.to(args.device)
     else:
         weight = None
     if args.model == 'graph_sage':
-        model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
+        model = Model(hidden_channels=args.hidden_channels, out_channels=args.out_channels, edge_features=1, metadata=graph_data.metadata())
     elif args.model == 'meta_sage':
-        model = MetaSage(train_data['customer'].num_nodes, hidden_channels=64, out_channels=64)
+        model = MetaSage(train_data['customer'].num_nodes, hidden_channels=args.hidden_channels, out_channels=args.out_channels)
     elif args.model == 'meta_gatv2':
         model = MetaGATv2(train_data['customer'].num_nodes, hidden_channels=args.hidden_channels, out_channels=args.out_channels, edge_channels=args.edge_channels)
-    # model.to(args.device)
+    model.to(args.device)
 
     # Due to lazy initialization, we need to run one model step so the number
     # of parameters can be inferred:
-    with torch.no_grad():
-        if args.model == 'graph_sage':
-            model.encoder(train_data.x_dict, train_data.edge_index_dict)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    # with torch.no_grad():
+        # if args.model == 'graph_sage':
+            # model.encoder(train_data.x_dict.to(args.device), train_data.edge_index_dict.to(args.device))
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     best_model_loss = np.Inf
     best_model_path = None
     for epoch in range(0, args.no_epochs):
-        loss = train(model, train_data, optimizer, weight)
-        train_rmse = test(model, train_data)
-        val_rmse = test(model, val_data)
-        # if epoch % 10 == 0:
-        #     wb_run_train.log({'train_epoch_loss': loss, 'train_epoch_rmse': train_rmse,
-        #                       'val_epoch_rmse': val_rmse})
+        loss = train(model, train_data.to(args.device), optimizer, weight)
+        train_rmse = test(model, train_data.to(args.device))
+        val_rmse = test(model, val_data.to(args.device))
+        if epoch % 10 == 0:
+            wb_run_train.log({'train_epoch_loss': loss, 'train_epoch_rmse': train_rmse,
+                              'val_epoch_rmse': val_rmse})
         print(f'Epoch: {epoch + 1:03d}, Loss: {loss:.4f}, Train: {train_rmse:.4f}, '
               f'Val: {val_rmse:.4f}')
         if val_rmse < best_model_loss:
@@ -206,32 +225,32 @@ def main(args):
             if best_model_path:
                 os.remove(best_model_path)
             best_model_path = new_best_path
-    # wb_run_train.finish()
+    wb_run_train.finish()
 
     args.job_type = "eval"
-    # wb_run_eval = wandb.init(entity=args.entity, project=args.project_name, group=args.group,
-    #                          # save_code=True, # Pycharm complains about duplicate code fragments
-    #                          job_type=args.job_type,
-    #                          tags=args.tags,
-    #                          name=f'{args.model}_eval',
-    #                          config=args,
-    #                          )
+    wb_run_eval = wandb.init(entity=args.entity, project=args.project_name, group=args.group,
+                             # save_code=True, # Pycharm complains about duplicate code fragments
+                             job_type=args.job_type,
+                             tags=args.tags,
+                             name=f'{args.model}_eval',
+                             config=args,
+                             )
     if args.model == 'graph_sage':
-        model = Model(hidden_channels=32, edge_features=2, metadata=graph_data.metadata())
+        model = Model(hidden_channels=args.hidden_channels, out_channels=args.out_channels, edge_features=1, metadata=graph_data.metadata())
     elif args.model == 'meta_sage':
-        model = MetaSage(train_data['customer'].num_nodes, hidden_channels=64, out_channels=64)
+        model = MetaSage(train_data['customer'].num_nodes, hidden_channels=args.hidden_channels, out_channels=args.out_channels)
     elif args.model == 'meta_gatv2':
-        model = MetaGATv2(train_data['customer'].num_nodes, hidden_channels=64, out_channels=64)
+        model = MetaGATv2(train_data['customer'].num_nodes, hidden_channels=args.hidden_channels, out_channels=args.out_channels, edge_channels=args.edge_channels)
     model.load_state_dict(torch.load(best_model_path))
-    # model.to(args.device)
-    test_rmse = test(model, test_data)
-    # wb_run_eval.log({'test_rmse': test_rmse})
-    # wb_run_eval.finish()
+    model.to(args.device)
+    test_rmse = test(model, test_data.to(args.device))
+    wb_run_eval.log({'test_rmse': test_rmse})
+    wb_run_eval.finish()
 
 
 if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
-    PARSER.add_argument('--use_weighted_loss', action='store_true',
+    PARSER.add_argument('--use_weighted_loss', action='store_true', default=False,
                         help='Whether to use weighted MSE loss.')
     PARSER.add_argument('--no_epochs', default=300, type=int)
     # Wandb logging options
@@ -251,13 +270,17 @@ if __name__ == '__main__':
                         help="Add a list of tags that describe the run.")
     # Model options
     model_choices = ['graph_sage', 'meta_sage', 'meta_gatv2']
-    PARSER.add_argument('-m', '--model', type=str.lower, default="meta_gatv2",
+    PARSER.add_argument('-m', '--model', type=str.lower, default="graph_sage",
                         choices=model_choices,
                         help=f"Model to be used for training {model_choices}")
     PARSER.add_argument('--hidden_channels', default=64, type=int)
     PARSER.add_argument('--out_channels', default=64, type=int)
-    PARSER.add_argument('--edge_channels', default=1, type=int)
+    PARSER.add_argument('--edge_channels', default=2, type=int)
     # Training options
     PARSER.add_argument('-device', '--device', type=str, default='cuda', help="Device to be used")
+    PARSER.add_argument('--val_split', default=0.15, type=float)
+    PARSER.add_argument('--test_split', default=0.15, type=float)
+    PARSER.add_argument('--lr', default=0.01, type=float)
+
     ARGS = PARSER.parse_args()
     main(ARGS)

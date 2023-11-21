@@ -20,8 +20,8 @@ class GAT(torch.nn.Module):
 class GNNEncoder(torch.nn.Module):
     def __init__(self, hidden_channels, out_channels):
         super().__init__()
-        self.conv1 = SAGEConv((-1, -1), hidden_channels)
-        self.conv2 = SAGEConv((-1, -1), out_channels)
+        self.conv1 = SAGEConv(-1, hidden_channels)
+        self.conv2 = SAGEConv(-1, out_channels)
 
     def forward(self, x, edge_index):
         x = self.conv1(x, edge_index).relu()
@@ -45,12 +45,12 @@ class EdgeDecoder(torch.nn.Module):
 
 
 class Model(torch.nn.Module):
-    def __init__(self, hidden_channels, edge_features, metadata):
+    def __init__(self, hidden_channels, out_channels, edge_features, metadata):
         super().__init__()
-        self.encoder = GNNEncoder(hidden_channels, hidden_channels)
+        self.encoder = GNNEncoder(hidden_channels, out_channels)
         self.encoder = to_hetero(self.encoder, metadata, aggr='sum')
         self.decoder = EdgeDecoder(hidden_channels, edge_features)
 
-    def forward(self, x_dict, edge_index_dict, edge_label_index):
+    def forward(self, x_dict, edge_index_dict, edge_label_index, *args, **kwargs):
         z_dict = self.encoder(x_dict, edge_index_dict)
         return self.decoder(z_dict, edge_label_index)
