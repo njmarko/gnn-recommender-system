@@ -38,7 +38,7 @@ def load_data(args):
     dst = [product_mappings[index] for index in graph_edge_data['product_id']]
     edge_index = torch.tensor([src, dst])
     edge_attrs = [
-        torch.tensor(graph_edge_data[column].values).unsqueeze(dim=1) for column in ['review_score', 'purchase_count','timestamp']
+        torch.tensor(graph_edge_data[column].values).unsqueeze(dim=1) for column in ['review_score', 'purchase_count','timestamp', 'payment_type', 'payment_installments', 'freight_value']
     ]
     # If we want all values on the edge
     edge_label = torch.cat(edge_attrs, dim=-1).to(torch.float32)
@@ -270,12 +270,12 @@ if __name__ == '__main__':
                         help="Add a list of tags that describe the run.")
     # Model options
     model_choices = ['graph_sage', 'meta_sage', 'meta_gatv2']
-    PARSER.add_argument('-m', '--model', type=str.lower, default="graph_sage",
+    PARSER.add_argument('-m', '--model', type=str.lower, default="meta_gatv2",
                         choices=model_choices,
                         help=f"Model to be used for training {model_choices}")
     PARSER.add_argument('--hidden_channels', default=64, type=int)
     PARSER.add_argument('--out_channels', default=64, type=int)
-    PARSER.add_argument('--edge_channels', default=2, type=int)
+    PARSER.add_argument('--edge_channels', default=5, type=int)
     # Training options
     PARSER.add_argument('-device', '--device', type=str, default='cuda', help="Device to be used")
     PARSER.add_argument('--val_split', default=0.15, type=float)

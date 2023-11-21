@@ -148,6 +148,7 @@ def create_graph_edges() -> pd.DataFrame:
     order_items = pd.read_csv('data/ecommerce/olist_order_items_dataset.csv')
     users = pd.read_csv('data/ecommerce/olist_customers_dataset.csv')
     ratings = pd.read_csv('data/ecommerce/olist_order_reviews_dataset.csv')
+    order_payment = pd.read_csv('data/ecommerce/olist_order_payments_dataset.csv')
 
     # Ne bi trebalo da moze da vise review-ova ima isti review_id
     # Ne bi trebalo da moze da vise review-ova ocenjuju istu narudzbinu
@@ -156,7 +157,12 @@ def create_graph_edges() -> pd.DataFrame:
     ratings.drop_duplicates(subset=['review_id'])
     ratings.drop_duplicates(subset=['order_id'])
 
-    user_orders = pd.merge(users, orders, how='inner', on='customer_id')
+    le = LabelEncoder()
+    le.fit(order_payment['payment_type'])
+    order_payment['payment_type'] = le.transform(order_payment['payment_type'])
+
+    orders_with_payments = pd.merge(orders, order_payment, how='left', on='order_id')
+    user_orders = pd.merge(users, orders_with_payments, how='inner', on='customer_id')
     user_orders_reviewed = pd.merge(user_orders, ratings, how='left', on='order_id')
     user_items = pd.merge(user_orders_reviewed, order_items, how='right', on='order_id')
 
@@ -183,7 +189,9 @@ def create_graph_edges() -> pd.DataFrame:
     user_items['timestamp'] = pd.to_datetime(user_items['order_purchase_timestamp'])
     user_items['timestamp'] = pd.to_numeric(user_items['timestamp']) // 10**9
 
-    return user_items[['customer_unique_id', 'product_id', 'review_score', 'purchase_count', 'timestamp']]
+    selected = user_items[['customer_unique_id', 'product_id', 'review_score', 'purchase_count', 'timestamp','payment_type','payment_installments','freight_value']]
+    selected = selected.dropna()
+    return selected
 
 
 if __name__ == '__main__':
