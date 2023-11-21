@@ -90,7 +90,7 @@ def load_data(args):
     return data
 
 
-def split_data(data, val_ratio=0.1, test_ratio=0.1):
+def split_data(data, val_ratio=0.15, test_ratio=0.15):
     transform = RandomLinkSplit(
         num_val=val_ratio,
         num_test=test_ratio,
@@ -162,7 +162,7 @@ def main(args):
                               config=args,
                               )
     graph_data = load_data(args)
-    train_data, val_data, test_data = split_data(graph_data)
+    train_data, val_data, test_data = split_data(graph_data, args.val_split, args.test_split)
 
     standard_scaler_edge = StandardScaler()
 
@@ -278,5 +278,7 @@ if __name__ == '__main__':
     PARSER.add_argument('--edge_channels', default=2, type=int)
     # Training options
     PARSER.add_argument('-device', '--device', type=str, default='cuda', help="Device to be used")
+    PARSER.add_argument('--val_split', default=0.15, type=float)
+    PARSER.add_argument('--test_split', default=0.15, type=float)
     ARGS = PARSER.parse_args()
     main(ARGS)
