@@ -20,12 +20,12 @@ from model.model import Model
 
 
 def weighted_mse_loss(pred, target, weight=None):
-    weight = 1. if weight is None else weight[target].to(pred.dtype)
+    weight = torch.tensor([1.]) if weight is None else weight[target.to('cpu').long()].to(pred.dtype)
     # diff = pred - target.to(pred.dtype)
     # weighted_diff = weight * diff.pow(2)
     # sum_loss = weighted_diff
     # loss = sum_loss.mean()
-    loss = (weight * (pred - target.to(pred.dtype)).pow(2)).mean()
+    loss = (weight.to(pred.device) * (pred - target.to(pred.dtype)).pow(2)).mean()
     return loss
 
 
@@ -184,8 +184,9 @@ def main(args):
     # We have an unbalanced dataset with many labels for rating 3 and 4, and very
     # few for 0 and 1, therefore we use a weighted MSE loss.
     if args.use_weighted_loss:
-        weight = torch.bincount(train_data['customer', 'product'].edge_label)
+        weight = torch.bincount(train_data['customer', 'product'].edge_label[:,0].long())
         weight = weight.max() / weight
+        weight.to(args.device)
     else:
         weight = None
     if args.model == 'graph_sage':
@@ -249,7 +250,7 @@ def main(args):
 
 if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
-    PARSER.add_argument('--use_weighted_loss', action='store_true',
+    PARSER.add_argument('--use_weighted_loss', action='store_true', default=False,
                         help='Whether to use weighted MSE loss.')
     PARSER.add_argument('--no_epochs', default=300, type=int)
     # Wandb logging options
