@@ -213,7 +213,6 @@ if __name__ == '__main__':
     # https://livingcost.org/cost/brazil/<city-name> for cost of living scraping
     # TODO: install selenium for scraping, and scrape for this
 
-
     # print(_products.columns)
     # print(_products.columns)
     #
