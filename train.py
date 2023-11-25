@@ -252,7 +252,7 @@ def main(args):
         loss = train(model, data_loader, optimizer, weight, scheduler, args)
         train_rmse = test(model, train_data.to(args.device))
         val_rmse = test(model, val_data.to(args.device))
-        if epoch % 10 == 0 and args.track_run:
+        if args.track_run:
             wb_run_train.log({'train_epoch_loss': loss, 'train_epoch_rmse': train_rmse,
                               'val_epoch_rmse': val_rmse})
         print(f'Epoch: {epoch + 1:03d}, Loss: {loss:.4f}, Train: {train_rmse:.4f}, '
@@ -304,7 +304,7 @@ if __name__ == '__main__':
     PARSER.add_argument('-project_name', '--project_name', type=str, default="gnn-recommender-system",
                         help="Name of the project. Each experiment in the project will be logged separately"
                              " as a group")
-    PARSER.add_argument('-group', '--group', type=str, default="default_experiment",
+    PARSER.add_argument('-group', '--group', type=str, default="paper",
                         help="Name of the experiment group. Each model in the experiment group will be logged "
                              "separately under a different type.")
     PARSER.add_argument('-save_model_wandb', '--save_model_wandb', type=bool, default=True,
