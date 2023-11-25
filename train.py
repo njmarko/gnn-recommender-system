@@ -104,10 +104,11 @@ def split_data(data, val_ratio=0.15, test_ratio=0.15):
     return transform(data)
 
 
-def train(model, data_loader, optimizer, weight=None, scheduler=None):
+def train(model, data_loader, optimizer, weight=None, scheduler=None, args=None):
     model.train()
     total_loss = total_nodes = 0
     for data in tqdm(data_loader):
+        data.to(args.device)
         optimizer.zero_grad()
         pred = model(data.x_dict, data.edge_index_dict,
                      data['customer', 'product'].edge_label_index,
@@ -248,7 +249,7 @@ def main(args):
     best_model_loss = np.Inf
     best_model_path = None
     for epoch in range(0, args.no_epochs):
-        loss = train(model, data_loader, optimizer, weight, scheduler)
+        loss = train(model, data_loader, optimizer, weight, scheduler, args)
         train_rmse = test(model, train_data.to(args.device))
         val_rmse = test(model, val_data.to(args.device))
         if epoch % 10 == 0 and args.track_run:
@@ -296,7 +297,7 @@ if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument('--use_weighted_loss', action='store_true', default=False,
                         help='Whether to use weighted MSE loss.')
-    PARSER.add_argument('--no_epochs', default=300, type=int)
+    PARSER.add_argument('--no_epochs', default=5, type=int)
     # Wandb logging options
     PARSER.add_argument('-entity', '--entity', type=str, default="weird-ai-yankovic",
                         help="Name of the team. Multiple projects can exist for the same team.")
@@ -331,7 +332,7 @@ if __name__ == '__main__':
     PARSER.add_argument('--base_lr', default=5e-3, type=float)
     PARSER.add_argument('--max_lr', default=5e-2, type=float)
 
-    PARSER.add_argument('--track_run', action='store_true', help='Track run on wandb')
+    PARSER.add_argument('--track_run', action='store_true', default=True, help='Track run on wandb')
 
     # Batch options
     PARSER.add_argument('--batch_size', default=5)
